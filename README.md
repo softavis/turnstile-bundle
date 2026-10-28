@@ -12,7 +12,7 @@ Symfony Forms, Twig and (optionally) password-login integration for Cloudflare T
 
 ## Requirements
 
-PHP 8.2+; Symfony 7.4 LTS or Symfony 8.1+. Symfony 8.0 is excluded because Composer security advisories currently block its available releases. Symfony Security is optional. CI exercises Symfony 7.4 and 8.1, including a lowest-dependency job.
+PHP 8.2+; Symfony 7.4 LTS and Symfony 8.1. Symfony 8.0 is excluded because Composer security advisories currently block its available releases. Symfony Security is optional. CI exercises Symfony 7.4 and 8.1, including a lowest-dependency job.
 
 ## Quick start
 
