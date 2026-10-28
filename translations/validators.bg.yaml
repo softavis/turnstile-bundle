@@ -1,0 +1,3 @@
+softavis_turnstile.invalid: 'Моля, завършете проверката Turnstile.'
+softavis_turnstile.unavailable: 'Проверката временно не е достъпна. Моля, опитайте отново.'
+softavis_turnstile.authentication_failed: 'Входът не може да бъде потвърден. Моля, опитайте отново.'

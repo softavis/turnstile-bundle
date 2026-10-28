@@ -1,0 +1,3 @@
+softavis_turnstile.invalid: 'Please complete the Turnstile check.'
+softavis_turnstile.unavailable: 'Verification is temporarily unavailable. Please try again.'
+softavis_turnstile.authentication_failed: 'Unable to verify this login. Please try again.'

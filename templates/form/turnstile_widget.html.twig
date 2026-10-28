@@ -1,0 +1,18 @@
+{% block turnstile_widget %}
+    {% if enabled %}
+        <div
+            id="{{ id }}_widget"
+            data-softavis-turnstile="true"
+            data-sitekey="{{ site_key }}"
+            data-token-input="{{ id }}"
+            data-theme="{{ theme }}"
+            data-size="{{ size }}"
+            data-language="{{ language }}"
+            data-appearance="{{ appearance }}"
+            {% if turnstile_action %}data-action="{{ turnstile_action }}"{% endif %}
+            {% for attrname, attrvalue in attr %}{{ attrname }}="{{ attrvalue }}"{% endfor %}
+        ></div>
+        <script src="/bundles/softavisturnstile/turnstile.js" defer></script>
+    {% endif %}
+    <input type="hidden" name="{{ full_name }}" id="{{ id }}" value="">
+{% endblock %}
