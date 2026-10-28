@@ -259,6 +259,34 @@ final class TurnstilePassportListenerTest extends TestCase
         }
     }
 
+    public function testDisabledVerificationResolvesBadgeWithoutVerifying(): void
+    {
+        $verifier = new StubVerifier();
+        $listener = $this->createListener($verifier, new RequestStack(), [
+            'enabled' => false,
+            'action' => null,
+            'token_field' => 'unused',
+            'firewalls' => [],
+        ], false);
+        $badge = new TurnstileBadge('', 'custom-login');
+        $passport = new Passport(
+            new UserBadge('alice'),
+            new \Symfony\Component\Security\Http\Authenticator\Passport\Credentials\CustomCredentials(
+                static fn (): bool => true,
+                'credentials',
+            ),
+            [$badge],
+        );
+
+        $listener->checkPassport(new CheckPassportEvent(
+            $this->createMock(AuthenticatorInterface::class),
+            $passport,
+        ));
+
+        self::assertTrue($badge->isResolved());
+        self::assertCount(0, $verifier->requests);
+    }
+
     public function testFirewallScopeAndUnrelatedAuthenticatorAreUnaffected(): void
     {
         $verifier = new StubVerifier();
@@ -282,13 +310,17 @@ final class TurnstilePassportListenerTest extends TestCase
         self::assertCount(0, $verifier->requests);
     }
 
-    private function createListener(StubVerifier $verifier, RequestStack $requestStack, array $login): TurnstilePassportListener
-    {
+    private function createListener(
+        StubVerifier $verifier,
+        RequestStack $requestStack,
+        array $login,
+        bool $enabled = true,
+    ): TurnstilePassportListener {
         return new TurnstilePassportListener(
             $verifier,
             $requestStack,
             new IdentityTranslator(),
-            true,
+            $enabled,
             $login,
             ['example.test'],
             false,

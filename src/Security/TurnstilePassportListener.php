@@ -37,7 +37,7 @@ final class TurnstilePassportListener
         if (!$this->enabled) {
             $disabledBadge = $event->getPassport()->getBadge(TurnstileBadge::class);
             if ($disabledBadge instanceof TurnstileBadge) {
-                $this->reject();
+                $disabledBadge->markResolved();
             }
 
             return;

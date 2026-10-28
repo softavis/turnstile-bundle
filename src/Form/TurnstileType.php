@@ -21,6 +21,7 @@ final class TurnstileType extends AbstractType
         private readonly bool $enabled,
         private readonly ?string $siteKey,
         private readonly array $widgetDefaults,
+        private readonly ?string $assetPackage,
     ) {
     }
 
@@ -83,6 +84,7 @@ final class TurnstileType extends AbstractType
             $view->vars[$option] = $options[$option];
         }
         $view->vars['enabled'] = $this->enabled;
+        $view->vars['asset_package'] = $this->assetPackage;
         $action = $options['turnstile_action'];
         if ($action === null) {
             foreach ($options['constraints'] as $constraint) {

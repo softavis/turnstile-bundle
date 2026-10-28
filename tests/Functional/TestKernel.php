@@ -7,16 +7,28 @@ namespace Softavis\TurnstileBundle\Tests\Functional;
 use Softavis\Turnstile\TurnstileVerifier;
 use Softavis\TurnstileBundle\SoftavisTurnstileBundle;
 use Softavis\TurnstileBundle\Tests\StubVerifier;
+use GuzzleHttp\Psr7\HttpFactory;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpKernel\Kernel;
+use Symfony\Component\HttpClient\Psr18Client;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\ResponseFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 
 final class TestKernel extends Kernel
 {
     use MicroKernelTrait;
+
+    private static int $kernelCounter = 0;
+    private readonly string $cacheDir;
 
     /**
      * @param array<string, mixed> $turnstileConfig
@@ -25,8 +37,10 @@ final class TestKernel extends Kernel
         private readonly array $turnstileConfig,
         private readonly bool $withSecurity = false,
         private readonly bool $overrideVerifier = true,
+        private readonly bool $withApplicationHttpAliases = false,
     ) {
         parent::__construct('test', false);
+        $this->cacheDir = sys_get_temp_dir().'/softavis-turnstile-tests/'.getmypid().'-'.++self::$kernelCounter;
     }
 
     public function registerBundles(): iterable
@@ -46,6 +60,7 @@ final class TestKernel extends Kernel
             'test' => true,
             'validation' => ['enabled' => true, 'enable_attributes' => true],
             'translator' => ['enabled' => true],
+            'assets' => ['base_path' => '/application'],
         ]);
         $container->loadFromExtension('twig', [
             'form_themes' => ['@Test/custom_form_theme.html.twig'],
@@ -62,6 +77,22 @@ final class TestKernel extends Kernel
         }
 
         $config = $this->turnstileConfig;
+        if ($this->withApplicationHttpAliases) {
+            $container->register('test.application_http_client', MockHttpClient::class)->setPublic(true);
+            $container->register('test.application_psr17_factory', HttpFactory::class)->setPublic(true);
+            $container->register('test.application_psr18_client', Psr18Client::class)
+                ->setArguments([
+                    new Reference('test.application_http_client'),
+                    new Reference('test.application_psr17_factory'),
+                    new Reference('test.application_psr17_factory'),
+                ])
+                ->setPublic(true);
+            $container->setAlias(HttpClientInterface::class, 'test.application_http_client')->setPublic(true);
+            $container->setAlias(ClientInterface::class, 'test.application_psr18_client')->setPublic(true);
+            $container->setAlias(RequestFactoryInterface::class, 'test.application_psr17_factory')->setPublic(true);
+            $container->setAlias(ResponseFactoryInterface::class, 'test.application_psr17_factory')->setPublic(true);
+            $container->setAlias(StreamFactoryInterface::class, 'test.application_psr17_factory')->setPublic(true);
+        }
         if ($this->overrideVerifier) {
             $container->register('test.turnstile_verifier', StubVerifier::class)->setPublic(true);
             $container->setAlias(TurnstileVerifier::class, 'test.turnstile_verifier')->setPublic(true);
@@ -75,7 +106,6 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir().'/softavis-turnstile-tests/'.spl_object_id($this);
+        return $this->cacheDir;
     }
-
 }

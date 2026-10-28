@@ -11,6 +11,7 @@ use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
@@ -18,7 +19,7 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 final class SoftavisTurnstileBundle extends AbstractBundle
 {
     public function prependExtension(
-        \Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator $configurator,
+        ContainerConfigurator $configurator,
         ContainerBuilder $container,
     ): void {
         $container->prependExtensionConfig('twig', [
@@ -28,7 +29,7 @@ final class SoftavisTurnstileBundle extends AbstractBundle
 
     public function configure(DefinitionConfigurator $definition): void
     {
-        /** @var ArrayNodeDefinition $rootNode */
+        /** @var ArrayNodeDefinition<null> $rootNode */
         $rootNode = $definition->rootNode();
         $rootNode
             ->children()
@@ -40,6 +41,7 @@ final class SoftavisTurnstileBundle extends AbstractBundle
                     ->defaultNull()
                 ->end()
                 ->booleanNode('forward_client_ip')->defaultFalse()->end()
+                ->stringNode('asset_package')->cannotBeEmpty()->defaultNull()->end()
                 ->arrayNode('widget')
                     ->addDefaultsIfNotSet()
                     ->children()
@@ -60,6 +62,14 @@ final class SoftavisTurnstileBundle extends AbstractBundle
                             ->stringPrototype()->cannotBeEmpty()->end()
                             ->defaultValue([])
                         ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('transport')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->stringNode('http_client_service')->cannotBeEmpty()->defaultNull()->end()
+                        ->stringNode('psr18_client_service')->cannotBeEmpty()->defaultNull()->end()
+                        ->stringNode('psr17_factory_service')->cannotBeEmpty()->defaultNull()->end()
                     ->end()
                 ->end()
                 ->stringNode('verifier_service')->defaultNull()->end()
@@ -92,7 +102,7 @@ final class SoftavisTurnstileBundle extends AbstractBundle
     /**
      * @param array<string, mixed> $config
      */
-    public function loadExtension(array $config, \Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator $container, ContainerBuilder $builder): void
+    public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
     {
         foreach ([
             'enabled',
@@ -100,14 +110,31 @@ final class SoftavisTurnstileBundle extends AbstractBundle
             'secret',
             'expected_hostnames',
             'forward_client_ip',
+            'asset_package',
             'widget',
             'login',
+            'transport',
         ] as $key) {
             $builder->setParameter('softavis_turnstile.'.$key, $config[$key]);
         }
 
         $loader = new PhpFileLoader($builder, new FileLocator(__DIR__.'/../config'));
         $loader->load('services.php');
+
+        $httpClientService = $config['transport']['http_client_service'] ?? 'softavis_turnstile.http_client';
+        $psr18ClientService = $config['transport']['psr18_client_service'] ?? 'softavis_turnstile.psr18_client';
+        $psr17FactoryService = $config['transport']['psr17_factory_service'] ?? 'softavis_turnstile.psr17_factory';
+        $builder->getDefinition('softavis_turnstile.psr18_client')->setArguments([
+            new Reference($httpClientService),
+            new Reference($psr17FactoryService),
+            new Reference($psr17FactoryService),
+        ]);
+        $builder->getDefinition(HttpTurnstileVerifier::class)->setArguments([
+            '%softavis_turnstile.secret%',
+            new Reference($psr18ClientService),
+            new Reference($psr17FactoryService),
+            new Reference($psr17FactoryService),
+        ]);
 
         if (is_string($config['verifier_service']) && $config['verifier_service'] !== '') {
             $builder->setAlias(TurnstileVerifier::class, $config['verifier_service']);
@@ -134,6 +161,5 @@ final class SoftavisTurnstileBundle extends AbstractBundle
                     'priority' => 384,
                 ]);
         }
-
     }
 }

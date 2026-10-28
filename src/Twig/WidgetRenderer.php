@@ -6,6 +6,7 @@ namespace Softavis\TurnstileBundle\Twig;
 
 use InvalidArgumentException;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Twig\Environment;
 
 final class WidgetRenderer
 {
@@ -18,6 +19,8 @@ final class WidgetRenderer
         private readonly bool $enabled,
         private readonly ?string $siteKey,
         private readonly array $defaults,
+        private readonly Environment $twig,
+        private readonly ?string $assetPackage = null,
     ) {
     }
 
@@ -52,16 +55,9 @@ final class WidgetRenderer
         $resolver->setAllowedValues('action', static fn (?string $action): bool => $action === null || trim($action) !== '');
         $options = $resolver->resolve($options);
         $id = 'softavis-turnstile-'.$this->counter++;
-        $siteKey = (string) ($options['site_key'] ?? '');
-        $fieldName = $this->escape($name);
-
-        if (!$this->enabled) {
-            return sprintf('<input type="hidden" name="%s" id="%s" value="">', $fieldName, $id);
-        }
-
         $attributes = [
             'data-softavis-turnstile' => 'true',
-            'data-sitekey' => $siteKey,
+            'data-sitekey' => (string) ($options['site_key'] ?? ''),
             'data-token-input' => $id,
             'data-theme' => $options['theme'],
             'data-size' => $options['size'],
@@ -73,22 +69,12 @@ final class WidgetRenderer
             $attributes['data-action'] = $action;
         }
 
-        $data = '';
-        foreach ($attributes as $key => $value) {
-            $data .= sprintf(' %s="%s"', $key, $this->escape($value));
-        }
-
-        return sprintf(
-            '<input type="hidden" name="%s" id="%s" value=""><div id="%s-widget"%s></div><script src="/bundles/softavisturnstile/turnstile.js" defer></script>',
-            $fieldName,
-            $id,
-            $id,
-            $data,
-        );
-    }
-
-    private function escape(string $value): string
-    {
-        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        return $this->twig->render('@SoftavisTurnstile/widget.html.twig', [
+            'enabled' => $this->enabled,
+            'name' => $name,
+            'id' => $id,
+            'attributes' => $attributes,
+            'asset_package' => $this->assetPackage,
+        ]);
     }
 }

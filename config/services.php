@@ -3,10 +3,6 @@
 declare(strict_types=1);
 
 use GuzzleHttp\Psr7\HttpFactory;
-use Psr\Http\Client\ClientInterface;
-use Psr\Http\Message\RequestFactoryInterface;
-use Psr\Http\Message\ResponseFactoryInterface;
-use Psr\Http\Message\StreamFactoryInterface;
 use Softavis\Turnstile\HttpTurnstileVerifier;
 use Softavis\Turnstile\TurnstileVerifier;
 use Softavis\TurnstileBundle\Form\TurnstileType;
@@ -17,7 +13,7 @@ use Softavis\TurnstileBundle\Validator\Constraints\TurnstileValidator;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
+use Twig\Environment;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
@@ -28,30 +24,25 @@ return static function (ContainerConfigurator $container): void {
             ->autoconfigure()
             ->private();
 
-    $services->set(HttpFactory::class);
-    $services->alias(RequestFactoryInterface::class, HttpFactory::class);
-    $services->alias(ResponseFactoryInterface::class, HttpFactory::class);
-    $services->alias(StreamFactoryInterface::class, HttpFactory::class);
+    $services->set('softavis_turnstile.psr17_factory', HttpFactory::class);
 
-    $services->set(HttpClient::class)
+    $services->set('softavis_turnstile.http_client', HttpClient::class)
         ->factory([HttpClient::class, 'create'])
         ->args([['timeout' => 5.0, 'max_duration' => 10.0]]);
-    $services->alias(HttpClientInterface::class, HttpClient::class);
 
-    $services->set(Psr18Client::class)
+    $services->set('softavis_turnstile.psr18_client', Psr18Client::class)
         ->args([
-            service(HttpClientInterface::class),
-            service(\Psr\Http\Message\ResponseFactoryInterface::class),
-            service(StreamFactoryInterface::class),
+            service('softavis_turnstile.http_client'),
+            service('softavis_turnstile.psr17_factory'),
+            service('softavis_turnstile.psr17_factory'),
         ]);
-    $services->alias(ClientInterface::class, Psr18Client::class);
 
     $services->set(HttpTurnstileVerifier::class)
         ->args([
             '%softavis_turnstile.secret%',
-            service(ClientInterface::class),
-            service(RequestFactoryInterface::class),
-            service(StreamFactoryInterface::class),
+            service('softavis_turnstile.psr18_client'),
+            service('softavis_turnstile.psr17_factory'),
+            service('softavis_turnstile.psr17_factory'),
         ]);
     $services->set(DisabledTurnstileVerifier::class);
 
@@ -70,6 +61,7 @@ return static function (ContainerConfigurator $container): void {
             '%softavis_turnstile.enabled%',
             '%softavis_turnstile.site_key%',
             '%softavis_turnstile.widget%',
+            '%softavis_turnstile.asset_package%',
         ])
         ->tag('form.type');
 
@@ -78,6 +70,8 @@ return static function (ContainerConfigurator $container): void {
             '%softavis_turnstile.enabled%',
             '%softavis_turnstile.site_key%',
             '%softavis_turnstile.widget%',
+            service('twig'),
+            '%softavis_turnstile.asset_package%',
         ]);
     $services->set(TurnstileExtension::class)
         ->args([service(WidgetRenderer::class)])

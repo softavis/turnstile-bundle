@@ -1,6 +1,6 @@
 # softavis/turnstile-bundle
 
-[![CI](https://github.com/softavis/turnstile-bundle/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/softavis/turnstile-bundle/actions/workflows/ci.yml) [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4.svg)](https://www.php.net/) [![Symfony](https://img.shields.io/badge/Symfony-7.4%20%7C%208.x-black.svg)](https://symfony.com/) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/softavis/turnstile-bundle/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/softavis/turnstile-bundle/actions/workflows/ci.yml) [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4.svg)](https://www.php.net/) [![Symfony](https://img.shields.io/badge/Symfony-7.4%20%7C%208.1-black.svg)](https://symfony.com/) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 <!-- Packagist badges: enable after the bundle is published.
 [![Latest Stable Version](https://poser.pugx.org/softavis/turnstile-bundle/v/stable)](https://packagist.org/packages/softavis/turnstile-bundle)
 [![Total Downloads](https://poser.pugx.org/softavis/turnstile-bundle/downloads)](https://packagist.org/packages/softavis/turnstile-bundle)
@@ -8,11 +8,11 @@
 
 Symfony Forms, Twig and (optionally) password-login integration for Cloudflare Turnstile, backed by [`softavis/turnstile`](https://github.com/softavis/turnstile). The core library owns Siteverify HTTP, response parsing, hostname/action matching and rejection classification; this bundle supplies Symfony integration and the browser widget.
 
-> **Pre-release dependency note:** this bundle is not published yet, and the core currently has no tagged release. The bundle requires the core repository's actual Packagist `dev-master` branch with a package-scoped stability flag; it does not lower your application's global minimum stability. See [installation](docs/index.md#installation) for using the Git repository before publication.
+> This bundle is not yet published to Packagist. It uses the released `softavis/turnstile` 1.x API; see [installation](docs/index.md#installation) to install this repository before publication.
 
 ## Requirements
 
-PHP 8.2+; Symfony 7.4 LTS or Symfony 8.x. Symfony Security is optional. The CI matrix exercises Symfony 7.4, 8.0 and 8.1, including a lowest-dependency job.
+PHP 8.2+; Symfony 7.4 LTS or Symfony 8.1+. Symfony 8.0 is excluded because Composer security advisories currently block its available releases. Symfony Security is optional. CI exercises Symfony 7.4 and 8.1, including a lowest-dependency job.
 
 ## Quick start
 

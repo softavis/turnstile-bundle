@@ -7,8 +7,12 @@ namespace Softavis\TurnstileBundle\Tests\Twig;
 use PHPUnit\Framework\TestCase;
 use Softavis\TurnstileBundle\Twig\TurnstileExtension;
 use Softavis\TurnstileBundle\Twig\WidgetRenderer;
+use Symfony\Bridge\Twig\Extension\AssetExtension;
+use Symfony\Component\Asset\PathPackage;
+use Symfony\Component\Asset\Packages;
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
+use Twig\Loader\ChainLoader;
 use Twig\Loader\FilesystemLoader;
 
 final class WidgetRendererTest extends TestCase
@@ -21,14 +25,14 @@ final class WidgetRendererTest extends TestCase
             'language' => 'auto',
             'appearance' => 'always',
             'default_action' => null,
-        ]);
+        ], $this->createTwig('/application'));
         $first = $renderer->render('login[token]', ['action' => 'log"<in>']);
         $second = $renderer->render('other');
 
         self::assertStringContainsString('name="login[token]"', $first);
         self::assertStringContainsString('data-sitekey="site&quot;&amp;key"', $first);
         self::assertStringContainsString('data-action="log&quot;&lt;in&gt;"', $first);
-        self::assertSame(2, substr_count($first.$second, 'src="/bundles/softavisturnstile/turnstile.js"'));
+        self::assertSame(2, substr_count($first.$second, 'src="/application/bundles/softavisturnstile/turnstile.js"'));
         self::assertStringContainsString('id="softavis-turnstile-0"', $first);
         self::assertStringContainsString('id="softavis-turnstile-1"', $second);
         self::assertStringNotContainsString('secret', $first);
@@ -42,7 +46,7 @@ final class WidgetRendererTest extends TestCase
             'language' => 'auto',
             'appearance' => 'always',
             'default_action' => null,
-        ]);
+        ], $this->createTwig('/application'));
         $html = $renderer->render('captcha');
 
         self::assertStringContainsString('type="hidden"', $html);
@@ -58,7 +62,9 @@ final class WidgetRendererTest extends TestCase
             'language' => 'auto',
             'appearance' => 'always',
             'default_action' => null,
-        ]);
+        ], $this->createTwig('/application', [
+            'widget' => '{{ turnstile_widget(name, {action: action}) }}',
+        ]));
         $twig = new Environment(new ArrayLoader([
             'widget' => '{{ turnstile_widget(name, {action: action}) }}',
         ]));
@@ -73,9 +79,7 @@ final class WidgetRendererTest extends TestCase
 
     public function testFormThemeRendersEscapedNestedInputAndBlankToken(): void
     {
-        $loader = new FilesystemLoader(dirname(__DIR__, 2).'/templates');
-        $loader->addPath(dirname(__DIR__, 2).'/templates', 'SoftavisTurnstile');
-        $twig = new Environment($loader, ['autoescape' => 'html']);
+        $twig = $this->createTwig('/application');
         $template = $twig->createTemplate(
             '{% use "@SoftavisTurnstile/form/turnstile_widget.html.twig" %}{{ block("turnstile_widget") }}',
         );
@@ -91,6 +95,7 @@ final class WidgetRendererTest extends TestCase
             'language' => 'auto',
             'appearance' => 'always',
             'turnstile_action' => 'signup',
+            'asset_package' => null,
             'attr' => ['title' => 'widget"&title'],
         ]);
 
@@ -99,6 +104,40 @@ final class WidgetRendererTest extends TestCase
         self::assertStringContainsString('title="widget&quot;&amp;title"', $html);
         self::assertStringContainsString('value=""', $html);
         self::assertStringNotContainsString('used-token', $html);
-        self::assertSame(1, substr_count($html, 'src="/bundles/softavisturnstile/turnstile.js"'));
+        self::assertSame(1, substr_count($html, 'src="/application/bundles/softavisturnstile/turnstile.js"'));
+    }
+
+    public function testStandaloneRendererUsesConfiguredNamedAssetPackage(): void
+    {
+        $renderer = new WidgetRenderer(true, 'public-key', [
+            'theme' => 'auto',
+            'size' => 'normal',
+            'language' => 'auto',
+            'appearance' => 'always',
+            'default_action' => null,
+        ], $this->createTwig('/application'), 'cdn');
+
+        $html = $renderer->render('captcha');
+
+        self::assertStringContainsString('src="/cdn-assets/bundles/softavisturnstile/turnstile.js"', $html);
+    }
+
+    /**
+     * @param array<string, string> $inlineTemplates
+     */
+    private function createTwig(string $basePath, array $inlineTemplates = []): Environment
+    {
+        $loader = new FilesystemLoader(dirname(__DIR__, 2).'/templates');
+        $loader->addPath(dirname(__DIR__, 2).'/templates', 'SoftavisTurnstile');
+        $twig = new Environment(new ChainLoader([
+            new ArrayLoader($inlineTemplates),
+            $loader,
+        ]), ['autoescape' => 'html']);
+        $twig->addExtension(new AssetExtension(new Packages(
+            new PathPackage($basePath, new \Symfony\Component\Asset\VersionStrategy\EmptyVersionStrategy()),
+            ['cdn' => new PathPackage('/cdn-assets', new \Symfony\Component\Asset\VersionStrategy\EmptyVersionStrategy())],
+        )));
+
+        return $twig;
     }
 }
