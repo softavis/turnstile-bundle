@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / ${{ matrix.dependencies }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.2'
+            symfony: '7.4'
+            dependencies: lowest
+          - php: '8.2'
+            symfony: '7.4'
+            dependencies: current
+          - php: '8.3'
+            symfony: '7.4'
+            dependencies: current
+          - php: '8.4'
+            symfony: '8.1'
+            dependencies: current
+          - php: '8.5'
+            symfony: '8.1'
+            dependencies: current
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+      - name: Pin Symfony dependencies to matrix series
+        env:
+          SYMFONY_SERIES: ${{ matrix.symfony }}
+        run: |
+          php -r '
+          $path = "composer.json";
+          $composer = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+          $lock = json_decode(file_get_contents("composer.lock"), true, flags: JSON_THROW_ON_ERROR);
+          $packages = array_merge($lock["packages"] ?? [], $lock["packages-dev"] ?? []);
+          foreach (["require", "require-dev"] as $section) {
+              foreach ($composer[$section] as $package => $constraint) {
+                  if (str_starts_with($package, "symfony/") && !str_ends_with($package, "-contracts") && !str_starts_with($package, "symfony/polyfill-")) {
+                      $packages[] = ["name" => $package];
+                  }
+              }
+          }
+          foreach ($packages as $package) {
+              $name = $package["name"];
+              if (str_starts_with($name, "symfony/") && !str_ends_with($name, "-contracts") && !str_starts_with($name, "symfony/polyfill-")) {
+                  $composer["require"][$name] = getenv("SYMFONY_SERIES").".*";
+              }
+          }
+          file_put_contents($path, json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL);
+          '
+      - name: Resolve dependencies
+        run: |
+          if [ "${{ matrix.dependencies }}" = "lowest" ]; then
+            composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+          else
+            composer update --prefer-stable --no-interaction --no-progress
+          fi
+      - run: composer test
+      - run: node --test tests/Browser/turnstile.test.js
+      - run: composer analyse
+      - run: composer style

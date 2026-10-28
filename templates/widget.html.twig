@@ -1,0 +1,7 @@
+{% if enabled %}
+    <input type="hidden" name="{{ name|e('html') }}" id="{{ id|e('html') }}" value="">
+    <div id="{{ (id ~ '-widget')|e('html') }}"{% for attrname, attrvalue in attributes %} {{ attrname|e('html') }}="{{ attrvalue|e('html') }}"{% endfor %}></div>
+    <script src="{{ asset('bundles/softavisturnstile/turnstile.js', asset_package) }}" defer></script>
+{% else %}
+    <input type="hidden" name="{{ name|e('html') }}" id="{{ id|e('html') }}" value="">
+{% endif %}

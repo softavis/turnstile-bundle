@@ -1,0 +1,63 @@
+{
+    "name": "softavis/turnstile-bundle",
+    "description": "Symfony integration for softavis/turnstile",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "symfony/asset": "^7.4 || ^8.1",
+        "guzzlehttp/psr7": "^2.7",
+        "softavis/turnstile": "^1.0",
+        "symfony/config": "^7.4 || ^8.1",
+        "symfony/dependency-injection": "^7.4 || ^8.1",
+        "symfony/form": "^7.4 || ^8.1",
+        "symfony/http-client": "^7.4 || ^8.1",
+        "symfony/http-foundation": "^7.4 || ^8.1",
+        "symfony/http-kernel": "^7.4 || ^8.1",
+        "symfony/options-resolver": "^7.4 || ^8.1",
+        "symfony/translation": "^7.4 || ^8.1",
+        "symfony/translation-contracts": "^3.5",
+        "symfony/twig-bridge": "^7.4 || ^8.1",
+        "symfony/validator": "^7.4 || ^8.1",
+        "twig/twig": "^3.12"
+    },
+    "require-dev": {
+        "masterminds/html5": "^2.9",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5",
+        "symfony/browser-kit": "^7.4 || ^8.1",
+        "symfony/framework-bundle": "^7.4 || ^8.1",
+        "symfony/rate-limiter": "^7.4 || ^8.1",
+        "symfony/security-bundle": "^7.4 || ^8.1",
+        "symfony/twig-bundle": "^7.4 || ^8.1",
+        "symfony/yaml": "^7.4 || ^8.1",
+        "friendsofphp/php-cs-fixer": "^3.80"
+    },
+    "suggest": {
+        "symfony/security-bundle": "Enables optional Turnstile protection for password-based logins.",
+        "symfony/twig-bundle": "Enables Twig helpers and automatic registration of the form theme."
+    },
+    "autoload": {
+        "psr-4": {
+            "Softavis\\TurnstileBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Softavis\\TurnstileBundle\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit --fail-on-deprecation",
+        "analyse": "phpstan analyse --no-progress",
+        "style": "php-cs-fixer fix --dry-run --diff --using-cache=no"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "phpstan/extension-installer": false
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
