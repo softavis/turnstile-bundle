@@ -14,6 +14,7 @@ use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\ErrorHandler\ErrorHandler;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\HttpClient\Psr18Client;
@@ -107,5 +108,15 @@ final class TestKernel extends Kernel
     public function getCacheDir(): string
     {
         return $this->cacheDir;
+    }
+
+    public function shutdown(): void
+    {
+        parent::shutdown();
+
+        $handler = get_exception_handler();
+        if (is_array($handler) && ($handler[0] ?? null) instanceof ErrorHandler) {
+            restore_exception_handler();
+        }
     }
 }

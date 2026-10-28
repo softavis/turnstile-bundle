@@ -13,6 +13,7 @@ use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\ErrorHandler\ErrorHandler;
 use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
 use Symfony\Component\Security\Core\User\InMemoryUser;
@@ -149,5 +150,15 @@ final class AuthenticationTestKernel extends Kernel
     public function getCacheDir(): string
     {
         return $this->cacheDir;
+    }
+
+    public function shutdown(): void
+    {
+        parent::shutdown();
+
+        $handler = get_exception_handler();
+        if (is_array($handler) && ($handler[0] ?? null) instanceof ErrorHandler) {
+            restore_exception_handler();
+        }
     }
 }
