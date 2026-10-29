@@ -6,7 +6,7 @@ on:
 
 jobs:
   checks:
-    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / ${{ matrix.dependencies }}
+    name: PHP ${{ matrix.php }} / Symfony ${{ matrix.symfony }} / PSR-7 ${{ matrix.psr7 }} / ${{ matrix.dependencies }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -14,18 +14,39 @@ jobs:
         include:
           - php: '8.2'
             symfony: '7.4'
+            psr7: '^2.7'
             dependencies: lowest
           - php: '8.2'
             symfony: '7.4'
+            psr7: '^2.7'
             dependencies: current
           - php: '8.3'
             symfony: '7.4'
+            psr7: '^2.7'
             dependencies: current
           - php: '8.4'
             symfony: '8.1'
+            psr7: '^2.7'
             dependencies: current
           - php: '8.5'
             symfony: '8.1'
+            psr7: '^2.7'
+            dependencies: current
+          - php: '8.2'
+            symfony: '7.4'
+            psr7: '^3.2'
+            dependencies: lowest
+          - php: '8.2'
+            symfony: '7.4'
+            psr7: '^3.2'
+            dependencies: current
+          - php: '8.4'
+            symfony: '8.1'
+            psr7: '^3.2'
+            dependencies: current
+          - php: '8.5'
+            symfony: '8.1'
+            psr7: '^3.2'
             dependencies: current
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +55,10 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
-      - name: Pin Symfony dependencies to matrix series
+      - name: Pin Symfony and PSR-7 dependencies to matrix series
         env:
           SYMFONY_SERIES: ${{ matrix.symfony }}
+          PSR7_CONSTRAINT: ${{ matrix.psr7 }}
         run: |
           php -r '
           $path = "composer.json";
@@ -50,6 +72,7 @@ jobs:
                   }
               }
           }
+          $composer["require"]["guzzlehttp/psr7"] = getenv("PSR7_CONSTRAINT");
           foreach ($packages as $package) {
               $name = $package["name"];
               if (str_starts_with($name, "symfony/") && !str_ends_with($name, "-contracts") && !str_starts_with($name, "symfony/polyfill-")) {
