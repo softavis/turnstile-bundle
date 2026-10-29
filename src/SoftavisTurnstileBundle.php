@@ -42,6 +42,12 @@ final class SoftavisTurnstileBundle extends AbstractBundle
                 ->end()
                 ->booleanNode('forward_client_ip')->defaultFalse()->end()
                 ->stringNode('asset_package')->cannotBeEmpty()->defaultNull()->end()
+                ->arrayNode('turbo')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')->defaultFalse()->end()
+                    ->end()
+                ->end()
                 ->arrayNode('widget')
                     ->addDefaultsIfNotSet()
                     ->children()
@@ -111,12 +117,14 @@ final class SoftavisTurnstileBundle extends AbstractBundle
             'expected_hostnames',
             'forward_client_ip',
             'asset_package',
+            'turbo',
             'widget',
             'login',
             'transport',
         ] as $key) {
             $builder->setParameter('softavis_turnstile.'.$key, $config[$key]);
         }
+        $builder->setParameter('softavis_turnstile.turbo.enabled', $config['turbo']['enabled']);
 
         $loader = new PhpFileLoader($builder, new FileLocator(__DIR__.'/../config'));
         $loader->load('services.php');

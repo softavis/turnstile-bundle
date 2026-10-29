@@ -21,6 +21,7 @@ final class WidgetRenderer
         private readonly array $defaults,
         private readonly Environment $twig,
         private readonly ?string $assetPackage = null,
+        private readonly bool $turboEnabled = false,
     ) {
     }
 
@@ -75,6 +76,7 @@ final class WidgetRenderer
             'id' => $id,
             'attributes' => $attributes,
             'asset_package' => $this->assetPackage,
+            'turbo_enabled' => $this->turboEnabled,
         ]);
     }
 }

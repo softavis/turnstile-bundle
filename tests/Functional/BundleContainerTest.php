@@ -33,6 +33,40 @@ final class BundleContainerTest extends TestCase
         } finally {
             $kernel->shutdown();
         }
+
+    }
+
+    public function testTurboIntegrationIsDisabledByDefaultAndCanBeEnabled(): void
+    {
+        $disabledKernel = new TestKernel([
+            'enabled' => true,
+            'site_key' => 'public-key',
+            'secret' => 'private-secret',
+        ]);
+        $disabledKernel->boot();
+        try {
+            self::assertSame(['enabled' => false], $disabledKernel->getContainer()->getParameter('softavis_turnstile.turbo'));
+        } finally {
+            $disabledKernel->shutdown();
+        }
+
+        $enabledKernel = new TestKernel([
+            'enabled' => true,
+            'site_key' => 'public-key',
+            'secret' => 'private-secret',
+            'turbo' => ['enabled' => true],
+        ]);
+        $enabledKernel->boot();
+        try {
+            self::assertSame(['enabled' => true], $enabledKernel->getContainer()->getParameter('softavis_turnstile.turbo'));
+            $form = $enabledKernel->getContainer()->get('test.service_container')->get('test.form_factory')
+                ->createBuilder()
+                ->add('captcha', \Softavis\TurnstileBundle\Form\TurnstileType::class)
+                ->getForm();
+            self::assertTrue($form->createView()['captcha']->vars['turbo_enabled']);
+        } finally {
+            $enabledKernel->shutdown();
+        }
     }
 
     public function testBundleDoesNotReplaceApplicationHttpOrFactoryAliases(): void

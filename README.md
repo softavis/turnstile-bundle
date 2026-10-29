@@ -65,6 +65,16 @@ softavis_turnstile:
 php bin/console assets:install public
 ```
 
+For applications using Turbo Drive, the optional adapter can be enabled in bundle configuration:
+
+```yaml
+softavis_turnstile:
+    turbo:
+        enabled: true
+```
+
+It is disabled by default. When enabled, the bundle loads its `turnstile-turbo.js` adapter after the normal `turnstile.js` runtime; it does not install or require Turbo. Run `assets:install public` again after enabling it or upgrading the bundle so both public files are available.
+
 ### 6. Add the field to a form
 
 ```php

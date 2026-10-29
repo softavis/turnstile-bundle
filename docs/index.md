@@ -12,6 +12,7 @@ The quick setup lives in the [README](../README.md#getting-started). This page h
 - [Login protection](#login-protection)
 - [Action, hostname and client IP policy](#action-hostname-and-client-ip-policy)
 - [Assets and browser behavior](#assets-and-browser-behavior)
+- [Turbo integration](#turbo-integration)
 - [Content Security Policy](#content-security-policy)
 - [Templates and translations](#templates-and-translations)
 - [Errors](#errors)
@@ -54,6 +55,8 @@ softavis_turnstile:
     expected_hostnames: ['www.example.com', 'example.com']   # exact hostnames; omit to skip the check
     forward_client_ip: false
     asset_package: null
+    turbo:
+        enabled: false
     widget:
         theme: auto               # auto, light, dark
         size: normal              # normal, compact, flexible
@@ -163,7 +166,37 @@ php bin/console assets:install public
 
 The script URL is built with Symfony's `asset()`, so the application's base path applies, and it normally resolves to `/bundles/softavisturnstile/turnstile.js`. Set `asset_package` to a named package from `framework.assets.packages` to serve it from that package (otherwise the default package is used). The script loads Cloudflare's `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit` directly; it is not proxied or bundled.
 
-Browser lifecycle as implemented: widgets are rendered explicitly; the token is stored in the matching hidden input on success and cleared on expiry or error (`expired`/`error` events are dispatched on the container); a `MutationObserver` mounts widgets inserted later and removes those whose nodes are removed. `window.__softavisTurnstileBundle` exposes `scan(root)`, `reset(container)` and `remove(container)`; `reset` clears the token and asks Cloudflare for a new one. A normal failed form response renders a new widget and token. The script does not disable submit buttons. This is **not** a Turbo/Stimulus integration and is not claimed to support SPA navigation.
+Browser lifecycle as implemented: widgets are rendered explicitly; the token is stored in the matching hidden input on success and cleared on expiry or error (`expired`/`error` events are dispatched on the container); a `MutationObserver` mounts widgets inserted later and removes those whose nodes are removed. `window.__softavisTurnstileBundle` exposes `scan(root)`, `reset(container)` and `remove(container)`; `reset` clears the token and asks Cloudflare for a new one. A normal failed form response renders a new widget and token. The script does not disable submit buttons. Turbo navigation remains unsupported unless the opt-in adapter below is enabled.
+
+## Turbo integration
+
+Turbo Drive support is opt-in and disabled by default:
+
+```yaml
+softavis_turnstile:
+    turbo:
+        enabled: true
+```
+
+Turbo remains an application dependency: the bundle neither installs nor loads Turbo, Stimulus, Symfony UX, or a frontend build pipeline. With the option enabled, both the Form theme and `turnstile_widget()` emit the normal `turnstile.js` runtime followed by the additional `turnstile-turbo.js` adapter. Repeated script tags are safe; the runtime and adapter each initialize only once. The existing `asset_package` setting applies to both URLs.
+
+Run the normal asset installation command after enabling the option or upgrading the bundle:
+
+```sh
+php bin/console assets:install public
+```
+
+The adapter coordinates the runtime with Turbo's navigation lifecycle:
+
+- It tears down Cloudflare-generated widget DOM and clears tokens on `turbo:before-cache`; the empty widget containers remain in the snapshot.
+- Cached previews stay unmounted until the final `turbo:load`; normal navigation, cached back/forward restoration, and re-rendered validation responses then scan and mount fresh widgets.
+- On `turbo:submit-end`, it resets only widgets in a form that is still connected. This covers network/HTTP failures and responses that leave the submitted form in place; it does not assume that every error response replaces the page.
+- Browser `pagehide` and persisted `pageshow` use the shared runtime teardown/remount path for native bfcache restoration.
+- Turbo's built-in morph lifecycle is supported: affected widgets are removed on `turbo:before-morph-element` and rescanned once (coalesced) after `turbo:morph`, `turbo:morph-element` or `turbo:frame-render`, so Turbo Stream `method="morph"` updates and frame morphs, which emit no page-level `turbo:morph`, also remount preserved containers. The adapter does not cancel morphs, so updated widget attributes and token-input references are applied before remounting.
+
+The browser suite uses Turbo 8.0.23 and a deterministic mock of Cloudflare's API. It covers navigation and Turbo history restoration, previews, page, Turbo Stream and frame morph refreshes, validation responses, an aborted submission that leaves the form present, form isolation, repeated loads, and a plain page without Turbo. The runtime's persisted `pageshow` path is tested directly; the headless Chromium runner used here performed a full reload rather than a native bfcache restore. No live Cloudflare smoke test was possible because `challenges.cloudflare.com` did not resolve in this environment.
+
+This is not general "Turbo/Stimulus" support: Stimulus itself needs no Turnstile adapter. Standalone Idiomorph changes do not emit Turbo morph events and are not covered. FrankenPHP live-reload/hot-reload behavior is not claimed or tested.
 
 ## Content Security Policy
 
@@ -205,9 +238,11 @@ composer install
 composer test
 composer analyse
 composer style
-node --test tests/Browser/turnstile.test.js
+npm ci
+npx playwright install chromium
+npm test
 ```
 
 ### Test architecture and limitations
 
-PHP tests stub `TurnstileVerifier` and include functional HTTP authentication tests on the supported Symfony series; no live Cloudflare requests are made. The JavaScript lifecycle test uses a Node VM with a local Turnstile API stub. The project has **not** been validated in a real browser, against live Cloudflare, with real CSP deployments, or with Turbo/Stimulus/SPA navigation.
+PHP tests stub `TurnstileVerifier` and include functional HTTP authentication tests on the supported Symfony series; no live Cloudflare requests are made. The JavaScript lifecycle test uses a Node VM with a local Turnstile API stub. The project has not been validated against live Cloudflare or real CSP deployments. The opt-in Turbo behavior is exercised in a local browser using Turbo and a mocked Cloudflare API. One browser test renders the bundle's real Twig templates (Form theme and `turnstile_widget()`, with `<script>` tags in `<body>` and the hidden input after them) to cover a first visit from a page without a widget, cached previews, back/forward and repeated script tags; it does not establish support for other SPA or hot-reload integrations.

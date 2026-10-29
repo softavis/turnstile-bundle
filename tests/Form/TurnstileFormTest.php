@@ -12,6 +12,25 @@ use Symfony\Component\Form\Extension\Core\Type\FormType;
 
 final class TurnstileFormTest extends TestCase
 {
+    public function testManualConstructionWithoutTurboArgumentKeepsTurboDisabled(): void
+    {
+        $type = new \Softavis\TurnstileBundle\Form\TurnstileType(true, 'key', [
+            'theme' => 'auto',
+            'size' => 'normal',
+            'language' => 'auto',
+            'appearance' => 'always',
+            'default_action' => null,
+        ], null);
+        $view = new \Symfony\Component\Form\FormView();
+        $form = $this->createMock(\Symfony\Component\Form\FormInterface::class);
+        $resolver = new \Symfony\Component\OptionsResolver\OptionsResolver();
+        $resolver->setDefaults(['constraints' => []]);
+        $type->configureOptions($resolver);
+        $type->buildView($view, $form, $resolver->resolve(['site_key' => 'key']));
+
+        self::assertFalse($view->vars['turbo_enabled']);
+    }
+
     public function testNestedFormUsesItsRealFieldNameAndVerifiesOnlyOnce(): void
     {
         $kernel = new TestKernel([

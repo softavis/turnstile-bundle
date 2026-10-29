@@ -89,6 +89,26 @@ jobs:
             composer update --prefer-stable --no-interaction --no-progress
           fi
       - run: composer test
-      - run: node --test tests/Browser/turnstile.test.js
       - run: composer analyse
       - run: composer style
+
+  browser:
+    name: Turbo browser lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - name: Install PHP dependencies (the browser tests render the real Twig templates)
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
