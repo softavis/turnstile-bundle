@@ -37,7 +37,7 @@ Required components: Config, DependencyInjection, Form, HttpClient, HttpFoundati
 composer require softavis/turnstile-bundle
 ```
 
-Symfony Flex registers a bundle only through a recipe, and **no Flex recipe for this package is published yet**. Installation therefore does not create configuration, environment variables or a login widget; follow the [README steps](../README.md#getting-started). If `config/bundles.php` lacks the entry, add it manually:
+Symfony Flex can automatically register a recognized Symfony bundle without a dedicated recipe. A recipe provides additional setup such as configuration files and environment placeholders; **no recipe for this package has been published yet**, so you must configure those yourself by following the [README steps](../README.md#getting-started). Check `config/bundles.php` and add the entry manually if it is missing, including when you do not use Flex:
 
 ```php
 Softavis\TurnstileBundle\SoftavisTurnstileBundle::class => ['all' => true],
@@ -171,8 +171,10 @@ Allow `https://challenges.cloudflare.com` in the directives the widget needs (at
 
 ## Templates and translations
 
-- Plain widget: `@SoftavisTurnstile/widget.html.twig`, overridable at `templates/bundles/SoftavisTurnstile/widget.html.twig`.
-- Form theme: `@SoftavisTurnstile/form/turnstile_widget.html.twig` (block `turnstile_widget`), overridable at `templates/bundles/SoftavisTurnstile/form/turnstile_widget.html.twig`, or by supplying your own form theme with that block.
+The Twig template namespace is `@SoftavisTurnstile`; the application override directory uses the bundle class name, `templates/bundles/SoftavisTurnstileBundle/` (see [Symfony's bundle override documentation](https://symfony.com/doc/current/bundles/override.html)).
+
+- Plain widget: `@SoftavisTurnstile/widget.html.twig`, overridable at `templates/bundles/SoftavisTurnstileBundle/widget.html.twig`.
+- Form theme: `@SoftavisTurnstile/form/turnstile_widget.html.twig` (block `turnstile_widget`), overridable at `templates/bundles/SoftavisTurnstileBundle/form/turnstile_widget.html.twig`, or by supplying your own form theme with that block.
 
 Messages use the `validators` domain (English and Bulgarian included). Override `softavis_turnstile.invalid`, `softavis_turnstile.unavailable` and `softavis_turnstile.authentication_failed` in your catalogs.
 

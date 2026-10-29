@@ -27,7 +27,7 @@ composer require softavis/turnstile-bundle
 
 ### 2. Register the bundle
 
-With Symfony Flex, the bundle is registered for you only if a Flex recipe applies. **No recipe for this package is published yet**, so installing it does not create any configuration, environment variables or login widget. Check `config/bundles.php`, and add the bundle if it is missing:
+Symfony Flex can automatically register a recognized Symfony bundle even when it has no dedicated recipe. A recipe provides additional setup, such as configuration files and environment placeholders; **no recipe for this package has been published yet**, so you must add that setup yourself. Check `config/bundles.php` and add the bundle if it is missing (including when you do not use Flex):
 
 ```php
 // config/bundles.php
