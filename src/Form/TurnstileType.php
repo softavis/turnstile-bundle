@@ -22,7 +22,7 @@ final class TurnstileType extends AbstractType
         private readonly ?string $siteKey,
         private readonly array $widgetDefaults,
         private readonly ?string $assetPackage,
-        private readonly bool $turboEnabled,
+        private readonly bool $turboEnabled = false,
     ) {
     }
 
