@@ -48,7 +48,21 @@
         });
     });
 
-    document.addEventListener('turbo:morph', () => {
-        runtime.scan(document);
+    // Stream and frame morphs have no page-level turbo:morph. Preserved containers
+    // emptied by the teardown above get no DOM mutation, so rescan once per morph.
+    let rescanQueued = false;
+    const scheduleRescan = () => {
+        if (rescanQueued) {
+            return;
+        }
+        rescanQueued = true;
+        queueMicrotask(() => {
+            rescanQueued = false;
+            runtime.scan(document);
+        });
+    };
+
+    ['turbo:morph', 'turbo:morph-element', 'turbo:frame-render'].forEach((name) => {
+        document.addEventListener(name, scheduleRescan);
     });
 })();

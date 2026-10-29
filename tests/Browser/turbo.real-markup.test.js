@@ -21,7 +21,15 @@ const assets = {
 };
 
 const page = (body) => `<!doctype html><html><head><meta charset="utf-8"><meta name="turbo-prefetch" content="false"><script src="/turbo.js" defer></script></head><body>${body}</body></html>`;
+// The widget container keeps its id across morphs so Idiomorph preserves the same element.
+const morphForm = (id, key, widgetId) => markup.form[0]
+    .replaceAll('token_one_widget', widgetId)
+    .replaceAll('token_one', id)
+    .replace('data-sitekey="test-site-key"', `data-sitekey="${key}"`);
+let frameVersion = 0;
 const pages = {
+    '/morph': page(`<main id="box"><form id="morph-form" action="/validation" method="post">${morphForm('stream_v0', 'test-site-key', 'stream_widget')}</form></main>
+        <turbo-frame id="frame" refresh="morph" src="/frame"></turbo-frame>`),
     '/start': page('<a id="to-form" href="/form">Form</a><a id="to-helper" href="/helper">Helper</a><a id="to-start" href="/start">Start</a>'),
     '/form': page(`<a id="to-start" href="/start">Start</a>
         <form id="form-one" action="/validation" method="post">${markup.form[0]}<button>Go</button></form>
@@ -30,7 +38,7 @@ const pages = {
         <form id="helper-form" action="/validation" method="post">${markup.helper[0]}${markup.helper[1]}</form>`),
 };
 
-test('real Twig markup with body-placed scripts under real Turbo', async (t) => {
+test('real Twig markup with body-placed scripts under real Turbo', { timeout: 90000 }, async (t) => {
     let gate;
     const server = http.createServer(async (request, response) => {
         const { pathname } = new URL(request.url, 'http://127.0.0.1');
@@ -46,17 +54,25 @@ test('real Twig markup with body-placed scripts under real Turbo', async (t) => 
             await current.release;
         }
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        if (pathname === '/frame') {
+            frameVersion += 1;
+            response.end(page(`<turbo-frame id="frame" refresh="morph"><form id="frame-form" action="/validation" method="post">${morphForm(`frame_v${frameVersion}`, `frame-key-${frameVersion}`, 'frame_widget')}</form></turbo-frame>`));
+            return;
+        }
         response.end(pages[pathname] ?? pages['/start']);
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+    t.after(async () => {
+        await new Promise((resolve) => server.close(resolve));
+    });
+    const browser = await chromium.launch({ headless: true, channel: 'chromium', timeout: 30000 });
     t.after(async () => {
         await browser.close();
-        await new Promise((resolve) => server.close(resolve));
     });
 
     const context = await browser.newContext();
+    context.setDefaultTimeout(10000);
     await context.addInitScript(() => {
         let nextId = 0;
         const widgets = new Map();
@@ -84,6 +100,10 @@ test('real Twig markup with body-placed scripts under real Turbo', async (t) => 
                 stats.removes += 1;
                 widgets.delete(id);
             },
+        };
+        window.__sitekey = (inputId) => {
+            const container = document.querySelector(`[data-token-input="${inputId}"]`);
+            return widgets.get(container?.dataset.mockWidget)?.options.sitekey;
         };
         window.__issue = (inputId, token) => {
             const container = document.querySelector(`[data-token-input="${inputId}"]`);
@@ -162,5 +182,37 @@ test('real Twig markup with body-placed scripts under real Turbo', async (t) => 
         await settled(2);
         assert.equal(await tab.evaluate(() => window.__stats.previewRenders), 0);
         assert.equal(await tab.evaluate(() => document.querySelectorAll('script[src$="turnstile.js"]').length), 2);
+    });
+
+    await t.test('Turbo Stream morph and frame morph refresh widgets without page-level turbo:morph', async () => {
+        await tab.goto(`${base}/morph`);
+        await tab.waitForFunction(() => document.getElementById('frame-form'));
+        await settled(2);
+        await tab.evaluate(() => {
+            window.__pageMorphs = 0;
+            document.addEventListener('turbo:morph', () => { window.__pageMorphs += 1; });
+            window.__issue('stream_v0', 'stale-stream');
+            window.__issue('frame_v1', 'stale-frame');
+        });
+
+        const streamForm = `<form id="morph-form" action="/validation" method="post">${morphForm('stream_v1', 'stream-key-1', 'stream_widget')}</form>`;
+        await tab.evaluate((html) => Turbo.renderStreamMessage(
+            `<turbo-stream action="update" method="morph" target="box"><template>${html}</template></turbo-stream>`,
+        ), streamForm);
+        await tab.waitForFunction(() => document.getElementById('stream_v1'));
+        await settled(2);
+        assert.equal(await tab.evaluate(() => window.__sitekey('stream_v1')), 'stream-key-1');
+        assert.equal(await tab.evaluate(() => document.getElementById('stream_v0')), null);
+        assert.equal(await tab.evaluate(() => document.getElementById('stream_v1').value), '');
+        await tab.evaluate(() => window.__issue('stream_v1', 'fresh-stream'));
+        assert.equal(await tab.evaluate(() => document.getElementById('stream_v1').value), 'fresh-stream');
+
+        await tab.evaluate(() => document.getElementById('frame').reload());
+        await tab.waitForFunction(() => document.getElementById('frame_v2'));
+        await settled(2);
+        assert.equal(await tab.evaluate(() => window.__sitekey('frame_v2')), 'frame-key-2');
+        assert.equal(await tab.evaluate(() => document.getElementById('frame_v2').value), '');
+        assert.equal(await tab.evaluate(() => document.querySelectorAll('[data-token-input]').length), 2);
+        assert.equal(await tab.evaluate(() => window.__pageMorphs), 0, 'no page-level morph occurred');
     });
 });

@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '../..');
 
-test('real Turbo navigation, cache, submission, and plain-page lifecycle', async (t) => {
+test('real Turbo navigation, cache, submission, and plain-page lifecycle', { timeout: 90000 }, async (t) => {
     let morphMode = false;
     let nextFormRequestGate;
 
@@ -56,13 +56,16 @@ test('real Turbo navigation, cache, submission, and plain-page lifecycle', async
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const browser = await chromium.launch({ headless: true, channel: 'chromium' });
+    t.after(async () => {
+        await new Promise((resolve) => server.close(resolve));
+    });
+    const browser = await chromium.launch({ headless: true, channel: 'chromium', timeout: 30000 });
     t.after(async () => {
         await browser.close();
-        await new Promise((resolve) => server.close(resolve));
     });
 
     const context = await browser.newContext();
+    context.setDefaultTimeout(10000);
     const page = await context.newPage();
     await context.addInitScript(() => {
         window.__turnstileMetrics = { snapshots: [], submitEnds: [], renders: [], morphs: 0, persistedPageshows: [] };
