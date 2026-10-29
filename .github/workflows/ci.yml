@@ -89,6 +89,18 @@ jobs:
             composer update --prefer-stable --no-interaction --no-progress
           fi
       - run: composer test
-      - run: node --test tests/Browser/turnstile.test.js
       - run: composer analyse
       - run: composer style
+
+  browser:
+    name: Turbo browser lifecycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test

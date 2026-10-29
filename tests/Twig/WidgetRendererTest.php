@@ -33,6 +33,7 @@ final class WidgetRendererTest extends TestCase
         self::assertStringContainsString('data-sitekey="site&quot;&amp;key"', $first);
         self::assertStringContainsString('data-action="log&quot;&lt;in&gt;"', $first);
         self::assertSame(2, substr_count($first.$second, 'src="/application/bundles/softavisturnstile/turnstile.js"'));
+        self::assertStringNotContainsString('turnstile-turbo.js', $first.$second);
         self::assertStringContainsString('id="softavis-turnstile-0"', $first);
         self::assertStringContainsString('id="softavis-turnstile-1"', $second);
         self::assertStringNotContainsString('secret', $first);
@@ -105,6 +106,38 @@ final class WidgetRendererTest extends TestCase
         self::assertStringContainsString('value=""', $html);
         self::assertStringNotContainsString('used-token', $html);
         self::assertSame(1, substr_count($html, 'src="/application/bundles/softavisturnstile/turnstile.js"'));
+        self::assertStringNotContainsString('turnstile-turbo.js', $html);
+    }
+
+    public function testFormThemeLoadsTurboAdapterOnlyWhenEnabledAndAfterRuntime(): void
+    {
+        $twig = $this->createTwig('/application');
+        $template = $twig->createTemplate(
+            '{% use "@SoftavisTurnstile/form/turnstile_widget.html.twig" %}{{ block("turnstile_widget") }}',
+        );
+
+        $html = $template->render([
+            'id' => 'captcha',
+            'full_name' => 'captcha',
+            'value' => '',
+            'enabled' => true,
+            'turbo_enabled' => true,
+            'site_key' => 'public',
+            'theme' => 'auto',
+            'size' => 'normal',
+            'language' => 'auto',
+            'appearance' => 'always',
+            'turnstile_action' => null,
+            'asset_package' => null,
+            'attr' => [],
+        ]);
+
+        self::assertStringContainsString('turnstile.js', $html);
+        self::assertStringContainsString('turnstile-turbo.js', $html);
+        self::assertLessThan(
+            strpos($html, 'turnstile-turbo.js'),
+            strpos($html, 'turnstile.js'),
+        );
     }
 
     public function testStandaloneRendererUsesConfiguredNamedAssetPackage(): void
@@ -120,6 +153,26 @@ final class WidgetRendererTest extends TestCase
         $html = $renderer->render('captcha');
 
         self::assertStringContainsString('src="/cdn-assets/bundles/softavisturnstile/turnstile.js"', $html);
+    }
+
+    public function testStandaloneRendererIncludesTurboAdapterFromConfiguredAssetPackage(): void
+    {
+        $renderer = new WidgetRenderer(true, 'public-key', [
+            'theme' => 'auto',
+            'size' => 'normal',
+            'language' => 'auto',
+            'appearance' => 'always',
+            'default_action' => null,
+        ], $this->createTwig('/application'), 'cdn', true);
+
+        $html = $renderer->render('captcha');
+
+        self::assertStringContainsString('src="/cdn-assets/bundles/softavisturnstile/turnstile.js"', $html);
+        self::assertStringContainsString('src="/cdn-assets/bundles/softavisturnstile/turnstile-turbo.js"', $html);
+        self::assertLessThan(
+            strpos($html, 'turnstile-turbo.js'),
+            strpos($html, 'turnstile.js'),
+        );
     }
 
     /**

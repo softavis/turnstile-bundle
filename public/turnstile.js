@@ -8,6 +8,7 @@
 
     const mounted = new Map();
     let apiPromise;
+    let paused = false;
 
     function loadApi() {
         if (window.turnstile) {
@@ -22,7 +23,14 @@
             script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
             script.async = true;
             script.defer = true;
-            script.onload = () => window.turnstile ? resolve(window.turnstile) : reject(new Error('Turnstile API unavailable'));
+            script.onload = () => {
+                if (window.turnstile) {
+                    resolve(window.turnstile);
+                } else {
+                    apiPromise = undefined;
+                    reject(new Error('Turnstile API unavailable'));
+                }
+            };
             script.onerror = () => {
                 apiPromise = undefined;
                 reject(new Error('Turnstile API failed to load'));
@@ -33,51 +41,85 @@
         return apiPromise;
     }
 
-    function dispatch(container, name) {
-        container.dispatchEvent(new CustomEvent(`softavis:turnstile:${name}`, { bubbles: true }));
+    function dispatch(container, name, detail = undefined) {
+        container.dispatchEvent(new CustomEvent(`softavis:turnstile:${name}`, { bubbles: true, detail }));
     }
 
-    function unmount(container, widgetId) {
-        if (window.turnstile) {
-            window.turnstile.remove(widgetId);
-        }
-        mounted.delete(container);
+    function tokenInputFor(container) {
+        return document.getElementById(container.dataset.tokenInput);
     }
 
-    function reset(container) {
-        const widgetId = mounted.get(container);
-        const tokenInput = document.getElementById(container.dataset.tokenInput);
+    function clearToken(container, tokenInput = tokenInputFor(container)) {
         if (tokenInput) {
             tokenInput.value = '';
         }
-        if (window.turnstile && widgetId !== undefined && widgetId !== 'pending') {
-            window.turnstile.reset(widgetId);
+    }
+
+    function unmount(container) {
+        const state = mounted.get(container);
+        mounted.delete(container);
+        clearToken(container);
+
+        try {
+            if (state && !state.pending && window.turnstile) {
+                window.turnstile.remove(state.widgetId);
+            }
+        } finally {
+            container.replaceChildren();
+        }
+    }
+
+    function reset(container) {
+        clearToken(container);
+        const state = mounted.get(container);
+        if (window.turnstile && state && !state.pending) {
+            window.turnstile.reset(state.widgetId);
         }
     }
 
     function remove(container) {
-        const widgetId = mounted.get(container);
-        if (widgetId !== undefined && widgetId !== 'pending') {
-            unmount(container, widgetId);
-        } else {
-            mounted.delete(container);
-        }
+        unmount(container);
+    }
+
+    function pause() {
+        paused = true;
+        mounted.forEach((state, container) => unmount(container));
+        document.querySelectorAll('[data-softavis-turnstile]').forEach((container) => {
+            clearToken(container);
+            container.replaceChildren();
+        });
+    }
+
+    function resume(root = document) {
+        paused = false;
+        scan(root);
     }
 
     function mount(container) {
-        if (mounted.has(container) || !container.isConnected) {
+        if (paused || mounted.has(container) || !container.isConnected) {
             return;
         }
 
-        const tokenInput = document.getElementById(container.dataset.tokenInput);
+        const tokenInput = tokenInputFor(container);
         if (!tokenInput || !container.dataset.sitekey) {
             dispatch(container, 'error');
             return;
         }
 
-        mounted.set(container, 'pending');
+        const state = { pending: true, widgetId: undefined };
+        mounted.set(container, state);
         loadApi().then((api) => {
-            if (!container.isConnected || !mounted.has(container)) {
+            if (
+                paused
+                || mounted.get(container) !== state
+                || !container.isConnected
+                || !tokenInput.isConnected
+                || tokenInputFor(container) !== tokenInput
+            ) {
+                if (mounted.get(container) === state) {
+                    mounted.delete(container);
+                }
+
                 return;
             }
 
@@ -89,18 +131,25 @@
                 appearance: container.dataset.appearance,
                 'response-field': false,
                 callback(token) {
+                    if (mounted.get(container) !== state || !container.isConnected || tokenInputFor(container) !== tokenInput) {
+                        return;
+                    }
                     tokenInput.value = token;
                     tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
                     tokenInput.dispatchEvent(new Event('change', { bubbles: true }));
                     dispatch(container, 'success');
                 },
                 'expired-callback'() {
-                    tokenInput.value = '';
-                    dispatch(container, 'expired');
+                    if (mounted.get(container) === state && tokenInputFor(container) === tokenInput) {
+                        clearToken(container, tokenInput);
+                        dispatch(container, 'expired');
+                    }
                 },
                 'error-callback'() {
-                    tokenInput.value = '';
-                    dispatch(container, 'error');
+                    if (mounted.get(container) === state && tokenInputFor(container) === tokenInput) {
+                        clearToken(container, tokenInput);
+                        dispatch(container, 'error');
+                    }
                 },
             };
             if (container.dataset.action) {
@@ -108,28 +157,43 @@
             }
 
             try {
-                mounted.set(container, api.render(container, options));
+                state.widgetId = api.render(container, options);
+                state.pending = false;
             } catch (error) {
                 mounted.delete(container);
-                dispatch(container, 'error');
-                throw error;
+                clearToken(container, tokenInput);
+                container.replaceChildren();
+                dispatch(container, 'error', { error });
             }
-        }).catch(() => {
-            if (container.isConnected) {
+        }, (error) => {
+            if (mounted.get(container) === state) {
                 mounted.delete(container);
-                dispatch(container, 'error');
+                if (container.isConnected) {
+                    dispatch(container, 'error', { error });
+                }
             }
         });
     }
 
     function scan(root) {
+        if (paused) {
+            return;
+        }
         if (root.matches?.('[data-softavis-turnstile]')) {
             mount(root);
         }
         root.querySelectorAll?.('[data-softavis-turnstile]').forEach(mount);
     }
 
-    const runtime = { render: mount, scan, reset, remove };
+    const runtime = {
+        render: mount,
+        scan,
+        reset,
+        remove,
+        pause,
+        resume,
+        prepareForCache: pause,
+    };
     window[runtimeKey] = runtime;
     scan(document);
 
@@ -144,16 +208,19 @@
                 if (!(node instanceof Element)) {
                     return;
                 }
-                mounted.forEach((widgetId, container) => {
-                    if (container === node || node.contains(container)) {
-                        if (widgetId !== 'pending') {
-                            unmount(container, widgetId);
-                        } else {
-                            mounted.delete(container);
-                        }
+                mounted.forEach((state, container) => {
+                    if ((container === node || node.contains(container)) && !container.isConnected) {
+                        unmount(container);
                     }
                 });
             });
         });
     }).observe(document.documentElement, { childList: true, subtree: true });
+
+    window.addEventListener('pagehide', pause);
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            resume(document);
+        }
+    });
 })();

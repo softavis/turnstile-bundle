@@ -62,6 +62,7 @@ return static function (ContainerConfigurator $container): void {
             '%softavis_turnstile.site_key%',
             '%softavis_turnstile.widget%',
             '%softavis_turnstile.asset_package%',
+            '%softavis_turnstile.turbo.enabled%',
         ])
         ->tag('form.type');
 
@@ -72,6 +73,7 @@ return static function (ContainerConfigurator $container): void {
             '%softavis_turnstile.widget%',
             service('twig'),
             '%softavis_turnstile.asset_package%',
+            '%softavis_turnstile.turbo.enabled%',
         ]);
     $services->set(TurnstileExtension::class)
         ->args([service(WidgetRenderer::class)])

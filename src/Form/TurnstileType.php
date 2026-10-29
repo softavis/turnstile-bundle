@@ -22,6 +22,7 @@ final class TurnstileType extends AbstractType
         private readonly ?string $siteKey,
         private readonly array $widgetDefaults,
         private readonly ?string $assetPackage,
+        private readonly bool $turboEnabled,
     ) {
     }
 
@@ -85,6 +86,7 @@ final class TurnstileType extends AbstractType
         }
         $view->vars['enabled'] = $this->enabled;
         $view->vars['asset_package'] = $this->assetPackage;
+        $view->vars['turbo_enabled'] = $this->turboEnabled;
         $action = $options['turnstile_action'];
         if ($action === null) {
             foreach ($options['constraints'] as $constraint) {

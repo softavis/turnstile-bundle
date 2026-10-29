@@ -9,6 +9,7 @@ class FakeElement {
         this.children = [];
         this.events = [];
         this.isConnected = true;
+        this.parentElement = null;
     }
 
     matches(selector) {
@@ -23,16 +24,24 @@ class FakeElement {
         return this.children.includes(element);
     }
 
+    replaceChildren(...children) {
+        this.children = children;
+        children.forEach((child) => {
+            child.parentElement = this;
+        });
+    }
+
     dispatchEvent(event) {
         this.events.push(event.type);
         return true;
     }
 }
 
-function startRuntime(widgets) {
+function startRuntime(widgets, { deferApi = false } = {}) {
     const callbacks = new Map();
     const inputs = new Map();
     const scripts = [];
+    const apiScripts = [];
     const calls = { render: 0, reset: [], remove: [] };
     const api = {
         render(container, options) {
@@ -52,8 +61,11 @@ function startRuntime(widgets) {
         head: {
             appendChild(script) {
                 scripts.push(script.src);
-                window.turnstile = api;
-                script.onload();
+                apiScripts.push(script);
+                if (!deferApi) {
+                    window.turnstile = api;
+                    script.onload();
+                }
             },
         },
         documentElement,
@@ -77,7 +89,15 @@ function startRuntime(widgets) {
         observe() {
         }
     }
-    const window = {};
+    const windowListeners = new Map();
+    const window = {
+        addEventListener(name, listener) {
+            if (!windowListeners.has(name)) {
+                windowListeners.set(name, []);
+            }
+            windowListeners.get(name).push(listener);
+        },
+    };
     const context = {
         window,
         document,
@@ -97,12 +117,12 @@ function startRuntime(widgets) {
         Map,
     };
     for (const widget of widgets) {
-        inputs.set(widget.dataset.tokenInput, { value: '', dispatchEvent() {} });
+        inputs.set(widget.dataset.tokenInput, { value: '', isConnected: true, dispatchEvent() {} });
     }
 
     vm.runInNewContext(fs.readFileSync('public/turnstile.js', 'utf8'), context);
 
-    return { window, document, inputs, scripts, callbacks, calls, observers };
+    return { window, windowListeners, document, inputs, scripts, apiScripts, callbacks, calls, observers, api };
 }
 
 test('shares the Cloudflare loader and owns success, expiry, reset, and removal', async () => {
@@ -162,7 +182,7 @@ test('scans dynamically added widgets and removes detached widgets', async () =>
         tokenInput: 'added',
         sitekey: 'public',
     });
-    runtime.inputs.set('added', { value: '', dispatchEvent() {} });
+    runtime.inputs.set('added', { value: '', isConnected: true, dispatchEvent() {} });
     runtime.observers[0].callback([{ addedNodes: [added], removedNodes: [] }]);
     await Promise.resolve();
 
@@ -171,4 +191,90 @@ test('scans dynamically added widgets and removes detached widgets', async () =>
     runtime.observers[0].callback([{ addedNodes: [], removedNodes: [added] }]);
     assert.deepEqual(runtime.calls.remove, ['widget-2']);
     assert.equal(runtime.scripts.length, 1);
+});
+
+test('discards a pending mount during cache teardown and mounts a fresh widget on resume', async () => {
+    const widget = new FakeElement({
+        softavisTurnstile: 'true',
+        tokenInput: 'token',
+        sitekey: 'public',
+    });
+    const runtime = startRuntime([widget], { deferApi: true });
+    const input = runtime.inputs.get('token');
+
+    input.value = 'stale-token';
+    runtime.window.__softavisTurnstileBundle.prepareForCache();
+    runtime.window.turnstile = runtime.api;
+    runtime.apiScripts[0].onload();
+    await Promise.resolve();
+
+    assert.equal(widget.isConnected, true);
+    assert.equal(input.value, '');
+    assert.equal(runtime.calls.render, 0);
+
+    runtime.window.__softavisTurnstileBundle.resume(runtime.document);
+    await Promise.resolve();
+
+    assert.equal(runtime.calls.render, 1);
+    assert.deepEqual(widget.children, []);
+});
+
+test('does not render a widget removed while the Cloudflare API is pending', async () => {
+    const widget = new FakeElement({
+        softavisTurnstile: 'true',
+        tokenInput: 'token',
+        sitekey: 'public',
+    });
+    const runtime = startRuntime([widget], { deferApi: true });
+
+    widget.isConnected = false;
+    runtime.observers[0].callback([{ addedNodes: [], removedNodes: [widget] }]);
+    runtime.window.turnstile = runtime.api;
+    runtime.apiScripts[0].onload();
+    await Promise.resolve();
+
+    assert.equal(runtime.calls.render, 0);
+    assert.deepEqual(runtime.calls.remove, []);
+});
+
+test('re-executing the runtime script does not add another widget', async () => {
+    const widget = new FakeElement({
+        softavisTurnstile: 'true',
+        tokenInput: 'token',
+        sitekey: 'public',
+    });
+    const runtime = startRuntime([widget]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    vm.runInNewContext(fs.readFileSync('public/turnstile.js', 'utf8'), {
+        window: runtime.window,
+        document: runtime.document,
+    });
+
+    assert.equal(runtime.calls.render, 1);
+    assert.equal(runtime.observers.length, 1);
+});
+
+test('cleans and remounts a widget when the browser restores a bfcache page', async () => {
+    const widget = new FakeElement({
+        softavisTurnstile: 'true',
+        tokenInput: 'token',
+        sitekey: 'public',
+    });
+    const runtime = startRuntime([widget]);
+    await Promise.resolve();
+    await Promise.resolve();
+    runtime.inputs.get('token').value = 'used-token';
+
+    runtime.windowListeners.get('pagehide')[0]();
+    runtime.callbacks.get(widget).callback('late-token');
+    runtime.windowListeners.get('pageshow')[0]({ persisted: true });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(runtime.inputs.get('token').value, '');
+    assert.deepEqual(runtime.calls.remove, ['widget-1']);
+    assert.equal(runtime.calls.render, 2);
+    assert.equal(widget.isConnected, true);
 });
