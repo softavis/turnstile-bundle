@@ -1,43 +1,49 @@
-# softavis/turnstile-bundle
+# softavis/turnstile-bundle documentation
 
-This bundle connects Symfony Forms, Validator, Twig and optional Security login flows to the framework-independent [`softavis/turnstile`](https://github.com/softavis/turnstile) package. Siteverify requests and response semantics stay in the core library; this bundle does not copy or reinterpret that protocol.
+This bundle connects Symfony Forms, Validator, Twig and optional Security login flows to [`softavis/turnstile`](https://github.com/softavis/turnstile), our framework-independent verification core. Siteverify requests and response semantics stay in the core library ([README](https://github.com/softavis/turnstile#readme)); this bundle does not copy or reinterpret that protocol.
 
-## Installation
+The quick setup lives in the [README](../README.md#getting-started). This page holds the details.
 
-**Publication status:** this bundle is not yet on Packagist. The core library is available as the stable `softavis/turnstile` 1.0.0 release. To try this repository before bundle publication, add its VCS source and require the PR branch:
+- [Requirements](#requirements)
+- [Installation notes](#installation-notes)
+- [Configuration reference](#configuration-reference)
+- [Forms and the validator](#forms-and-the-validator)
+- [Twig widget](#twig-widget)
+- [Login protection](#login-protection)
+- [Action, hostname and client IP policy](#action-hostname-and-client-ip-policy)
+- [Assets and browser behavior](#assets-and-browser-behavior)
+- [Content Security Policy](#content-security-policy)
+- [Templates and translations](#templates-and-translations)
+- [Errors](#errors)
+- [Disabled mode and test keys](#disabled-mode-and-test-keys)
+- [Advanced and development](#advanced-and-development)
 
-```json
-{
-  "repositories": [
-    {"type": "vcs", "url": "https://github.com/softavis/turnstile-bundle"}
-  ],
-  "require": {
-    "softavis/turnstile-bundle": "dev-feat/turnstile-bundle@dev"
-  }
-}
+## Requirements
+
+| Symfony | PHP |
+|---------|-----|
+| 7.4 LTS | 8.2+ |
+| 8.1     | 8.4.1+ |
+
+The bundle itself declares `php: ^8.2`; Symfony 8.1 components require PHP 8.4.1 or later, so Composer selects Symfony 7.4 on older PHP versions. CI runs PHP 8.2 (Symfony 7.4, lowest and current dependencies), 8.3 (7.4), 8.4 and 8.5 (8.1).
+
+**Symfony 8.0 is excluded.** It is a non-LTS release that has reached the end of upstream support (see the [Symfony releases page](https://symfony.com/releases/8.0)), and its latest release remains affected by advisories whose fixes were published only for other branches, for example [CVE-2026-108082](https://symfony.com/cve-2026-108082) (`symfony/http-foundation`, fixed in 7.4.19 and 8.1.7) and [CVE-2026-109413](https://symfony.com/cve-2026-109413) (`symfony/yaml`, fixed in 7.4.18 and 8.1.6). Upgrade to Symfony 8.1 or stay on 7.4 LTS.
+
+Required components: Config, DependencyInjection, Form, HttpClient, HttpFoundation, HttpKernel, OptionsResolver, Translation, Twig Bridge, Validator, Asset, Twig and Guzzle PSR-7. Guzzle PSR-7 is used only as an explicit PSR-17 factory; Symfony's `Psr18Client` supplies PSR-18. No factory discovery is used. Symfony Security (`symfony/security-bundle`) is optional and needed only for login protection.
+
+## Installation notes
+
+```sh
+composer require softavis/turnstile-bundle
 ```
 
-Composer's package stability flag is scoped to this dependency; do not lower your application's global `minimum-stability`. When the bundle is released to Packagist, use `composer require softavis/turnstile-bundle`. No core VCS repository declaration is needed; the bundle requires `softavis/turnstile:^1.0`.
-
-With Symfony Flex, allow it to register the bundle. Otherwise add it to `config/bundles.php`:
+Symfony Flex registers a bundle only through a recipe, and **no Flex recipe for this package is published yet**. Installation therefore does not create configuration, environment variables or a login widget; follow the [README steps](../README.md#getting-started). If `config/bundles.php` lacks the entry, add it manually:
 
 ```php
-return [
-    // ...
-    Softavis\TurnstileBundle\SoftavisTurnstileBundle::class => ['all' => true],
-];
+Softavis\TurnstileBundle\SoftavisTurnstileBundle::class => ['all' => true],
 ```
 
-The bundle needs Symfony Config, DependencyInjection, Form, HttpClient, HttpFoundation, HttpKernel, OptionsResolver, Translation, Twig Bridge, Validator, Twig and Guzzle PSR-7. Guzzle PSR-7 is used only as an explicit PSR-17 factory implementation; Symfony HttpClient's `Psr18Client` bridge supplies PSR-18. No factory discovery is used. Symfony Security is optional.
-
-## Credentials and configuration
-
-Keep the secret in server-side configuration, never in Twig, HTML, JavaScript, or a public environment variable. Configure secrets with Symfony's normal environment/configuration mechanisms (for example `.env.local`, deployment secrets, or vault-backed `%env(...)%`):
-
-```dotenv
-TURNSTILE_SITE_KEY=your-public-site-key
-TURNSTILE_SECRET=your-private-secret
-```
+## Configuration reference
 
 ```yaml
 # config/packages/softavis_turnstile.yaml
@@ -45,47 +51,36 @@ softavis_turnstile:
     enabled: true
     site_key: '%env(TURNSTILE_SITE_KEY)%'
     secret: '%env(TURNSTILE_SECRET)%'
-    expected_hostnames: ['www.example.com', 'example.com']
+    expected_hostnames: ['www.example.com', 'example.com']   # exact hostnames; omit to skip the check
     forward_client_ip: false
     asset_package: null
     widget:
-        theme: auto             # auto, light, dark
-        size: normal             # normal, compact, flexible
-        language: auto           # auto or a Cloudflare-supported language code
-        appearance: always       # always, execute, interaction-only
+        theme: auto               # auto, light, dark
+        size: normal              # normal, compact, flexible
+        language: auto            # auto or a Cloudflare-supported language code
+        appearance: always        # always, execute, interaction-only
         default_action: null
     login:
         enabled: false
-        action: null
+        action: null              # required when login.enabled is true
         token_field: cf-turnstile-response
-        firewalls: []
+        firewalls: []             # empty: every firewall
     transport:
         http_client_service: null
         psr18_client_service: null
         psr17_factory_service: null
+    verifier_service: null
 ```
 
-Verification is enabled by default. It requires both `site_key` and `secret`; missing or blank explicit values fail configuration with an actionable message. Environment placeholders resolve at runtime, so an undefined environment variable is reported by Symfony when the value is first needed. Setting `enabled: false` permits missing credentials, renders only an empty hidden input, skips form validation and makes no verification request. Automatic Security protection is skipped. An explicitly attached `TurnstileBadge` is marked resolved as a bypass without a verifier call, allowing normal authentication checks to proceed.
+With `enabled: true` (the default) both `site_key` and `secret` are required; blank values fail configuration. Environment placeholders resolve at runtime. Keep the secret in server-side configuration, never in Twig, HTML, JavaScript or a public variable.
 
-The defaults use a 5-second Symfony HttpClient inactivity timeout and a 10-second maximum request duration. This bundle does not change application-wide HTTP aliases. To customize transport wiring, set `transport.http_client_service` to a Symfony `HttpClientInterface` service ID, `transport.psr18_client_service` to a PSR-18 client service ID, and/or `transport.psr17_factory_service` to a PSR-17 factory service implementing the request, response and stream factory interfaces. The bundle-specific defaults are `softavis_turnstile.http_client`, `softavis_turnstile.psr18_client` and `softavis_turnstile.psr17_factory`. For a complete custom verifier, set `verifier_service` to an existing service ID implementing `Softavis\Turnstile\TurnstileVerifier`; that service replaces the interface alias. Keep operational failures represented as `Softavis\Turnstile\Exception\TurnstileException` so the bundle can return its generic unavailable message.
+## Forms and the validator
 
-Asset URLs use Symfony's `asset()` function. By default, the configured default asset package is used; set `asset_package` to a configured named package when the bundle's static asset uses one.
+`TurnstileType` (`Softavis\TurnstileBundle\Form\TurnstileType`) is unmapped, not required, has no label and validates its token once with the `Turnstile` constraint. Options: `turnstile_action` (kept distinct from Symfony's `action` URL option), `site_key`, `theme`, `size`, `language`, `appearance` (defaults come from `widget`). The widget uses the field's `full_name`, so nested forms and custom names work. The built-in form theme is appended to your existing themes. The token is never echoed back after an invalid submission, so the re-rendered widget fetches a fresh one.
 
-## Symfony Forms and Validator
+If you pass your own `Turnstile` constraint in `constraints`, there must be exactly one, and its `expectedAction` must match `turnstile_action` when both are set.
 
-Add `TurnstileType` to any form. It is unmapped, does not alter the rest of the form data, and validates the token value supplied to the Validator:
-
-```php
-use Softavis\TurnstileBundle\Form\TurnstileType;
-
-$builder
-    ->add('email')
-    ->add('turnstile', TurnstileType::class, ['turnstile_action' => 'signup']);
-```
-
-The action on the widget and the server-side expected action are taken from the same `turnstile_action` option (kept distinct from Symfony's built-in form `action` URL option). The field uses Symfony's actual `full_name`, so nested forms and custom field names submit correctly. The built-in form theme is appended to the application's existing themes; it does not replace them. The token is not echoed back into the HTML after an invalid submission, allowing the freshly-rendered widget to issue a fresh token.
-
-Use the reusable constraint directly on a DTO property or value when appropriate:
+### Standalone constraint / DTO
 
 ```php
 use Softavis\TurnstileBundle\Validator\Constraints\Turnstile;
@@ -97,56 +92,21 @@ final class SignupInput
 }
 ```
 
-The validator checks that exact value; it does not reach into a fixed request parameter. Explicit constraint hostnames override the global hostname allowlist. Without a per-constraint list, the global list is applied. CSRF protection and rate limiting remain independent application protections.
+The validator checks the exact value it receives; it does not read a fixed request parameter. `expectedHostnames` on the constraint overrides the global allowlist; without it the global list applies. CSRF protection and rate limiting remain separate, independent protections.
 
-## Twig and standard `form_login`
+## Twig widget
 
-For a plain HTML form, the Twig function emits a hidden response input, escaped widget attributes, and the local lifecycle loader:
+For a plain HTML form:
 
 ```twig
-<form method="post">
-    {# Include your independent CSRF and rate-limit protections. #}
-    {{ turnstile_widget('cf-turnstile-response', {action: 'login'}) }}
-    <button type="submit">Sign in</button>
-</form>
+{{ turnstile_widget('cf-turnstile-response', {action: 'login'}) }}
 ```
 
-Choose the exact request field expected by the receiving form/authenticator. Multiple calls receive distinct IDs; the Cloudflare `api.js` loader is shared and uses explicit rendering, not global callback names. Install the bundle's asset into the application's public directory using Symfony's normal asset installation:
+Signature: `turnstile_widget(name = 'cf-turnstile-response', options = {})`. Options: `action`, `site_key`, `theme`, `size`, `language`, `appearance`. It emits a hidden response input, the widget container and the bundle script. Multiple calls get distinct IDs; the field name must match what the receiving code reads.
 
-```sh
-php bin/console assets:install public
-```
+## Login protection
 
-The browser script URL is generated with Symfony's `asset()` function, respecting the configured base path and asset package. After `assets:install`, it normally resolves under `/bundles/softavisturnstile/turnstile.js`. It loads Cloudflare's official `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit` directly; this bundle does not proxy or bundle Cloudflare's script. Plain Twig markup is rendered from `templates/widget.html.twig`, which can be overridden at `templates/bundles/SoftavisTurnstile/widget.html.twig`.
-
-The script exposes `window.__softavisTurnstileBundle` with `scan(root)`, `reset(container)` and `remove(container)` methods. It keeps tokens in the matching hidden input, clears them on expiry/error, and cleans up Turnstile widgets when their DOM nodes are removed. A normal failed form response renders a new widget/token. The DOM observer supports widgets inserted or removed by partial DOM updates, but this is **not** a Turbo/Stimulus integration and is not a claim of full SPA navigation support. No submit-button disabling is performed.
-
-### Content Security Policy
-
-Permit Cloudflare's `https://challenges.cloudflare.com` origin in the directives required by the widget (at minimum `script-src`, `frame-src`, and `connect-src`). Also permit the bundle asset under your own application's script policy. The bundle adds no inline JavaScript and does not require `'unsafe-inline'`; adapt policies to your own CSP nonce/hash and Cloudflare setup.
-
-## Expected action, hostname and client IP
-
-Set a server-controlled expected action on a form or constraint, and configure only exact hostnames that should be accepted:
-
-```yaml
-softavis_turnstile:
-    expected_hostnames: ['shop.example.com']
-    widget:
-        default_action: checkout
-```
-
-The core library performs exact action and hostname matching. It is not safe to derive expected values from submitted form data. Setting no hostname allowlist disables this extra hostname check.
-
-Client IP forwarding is off by default. If required, set `forward_client_ip: true`. The bundle uses only Symfony `Request::getClientIp()`, which respects Symfony's trusted proxy configuration; configure `framework.trusted_proxies` and `framework.trusted_headers` correctly. Do not independently read `X-Forwarded-For`.
-
-## Optional Security login protection
-
-Security integration is explicitly opt-in. It uses `CheckPassportEvent`; it does not install a replacement authenticator or protect every POST/password-bearing passport.
-
-### Standard `form_login` and login-form authenticators
-
-Enable the feature with an action value and optionally restrict automatic detection to named firewall(s):
+Login protection is explicitly opt-in (`login.enabled: true` with a non-blank `login.action`). It is implemented as a `CheckPassportEvent` listener; it does not replace your authenticator and does not protect every POST.
 
 ```yaml
 softavis_turnstile:
@@ -157,15 +117,15 @@ softavis_turnstile:
         firewalls: [main]
 ```
 
-Automatic protection applies only to authenticators extending Symfony's `AbstractLoginFormAuthenticator` whose passport contains `PasswordCredentials`. This includes standard `form_login` and custom login-form authenticators following that base class. The token is read from the configured root request field. Use the same `login` action in the Twig widget.
+```twig
+{{ turnstile_widget('cf-turnstile-response', {action: 'login'}) }}
+```
 
-Ordering is exercised through real HTTP authentication tests on Symfony 7.4 and 8.1: the Turnstile listener runs at priority **384**, after CSRF validation (512) and before user checking/password credentials (256/0). The user-provider listener at 1024 configures a lazy user loader but does not itself call it. Login throttling (2080) therefore still runs before Turnstile, and failed verification follows the normal authentication-failure path.
+`login.token_field` must equal the widget's field name, and `login.action` the widget's `action`. Automatic protection applies to authenticators extending `AbstractLoginFormAuthenticator` whose passport has `PasswordCredentials`, which includes standard `form_login`. If `firewalls` is set, only those firewalls are covered.
 
-Missing/invalid tokens and operational errors reject login with the same translated generic authentication message; transport details are not included. Other failures and success handlers remain Symfony's responsibility.
+### Custom authenticators: explicit opt-in
 
-### Explicit custom-authenticator opt-in
-
-For another custom authenticator, opt in only by attaching `TurnstileBadge` to its passport:
+Other authenticators opt in by adding `Softavis\TurnstileBundle\Security\TurnstileBadge` (constructor: `string $response`, `string $action`) to their passport:
 
 ```php
 use Softavis\TurnstileBundle\Security\TurnstileBadge;
@@ -176,32 +136,76 @@ $passport->addBadge(new TurnstileBadge(
 ));
 ```
 
-The badge carries both token and expected action. It is resolved only after a successful verification. If the authenticator also qualifies for automatic protection, a single listener invocation uses the badge values and verifies once. Custom authenticators must defer user lookup until passport checking; the bundle cannot undo an eager lookup performed inside `authenticate()`.
+The badge is resolved only after successful verification. If the authenticator also qualifies for automatic protection, the badge values are used and verification runs once. Defer user lookup to passport checking; the bundle cannot undo an eager lookup in `authenticate()`.
 
-OAuth callbacks, `remember_me`, `http_basic`, `json_login`, `login_link`, API token/JWT authentication and programmatic `Security::login()` are not automatically protected. A custom flow can opt in explicitly with the badge.
+### Flows not protected by default
 
-## Templates, translations and errors
+OAuth callbacks, `remember_me`, `http_basic`, `json_login`, `login_link`, API token/JWT authentication and programmatic `Security::login()` are not protected automatically. A custom flow can opt in with the badge.
 
-The form theme lives at `templates/form/turnstile_widget.html.twig` and is registered additively. Override it in your application by copying the block into an application-owned theme and selecting it after/before other themes as appropriate. The plain Twig helper is `turnstile_widget(name, options)`.
+## Action, hostname and client IP policy
 
-Messages use Symfony's `validators` translation domain; English and Bulgarian catalogs are included. Override `softavis_turnstile.invalid`, `softavis_turnstile.unavailable` and `softavis_turnstile.authentication_failed` in your application catalogs. Token rejection is distinct from an operational verification failure in form validation. Security login intentionally gives both the same generic authentication error.
+Expected action and hostnames are server-controlled; never derive them from submitted data. The core library performs exact matching.
 
-## Disabled mode and Cloudflare test keys
+```yaml
+softavis_turnstile:
+    expected_hostnames: ['shop.example.com']
+    widget:
+        default_action: checkout
+```
 
-Cloudflare provides official test sitekeys and secrets in its [Turnstile testing documentation](https://developers.cloudflare.com/turnstile/troubleshooting/testing/). Use only those official test values in isolated development/testing environments. They are not production credentials. Alternatively set `enabled: false` to test non-widget application behavior; in disabled mode no verification call is made.
+Client IP forwarding is off by default. With `forward_client_ip: true` the bundle sends only `Request::getClientIp()`, which honours Symfony's trusted proxy settings; configure `framework.trusted_proxies` and `framework.trusted_headers` correctly. The bundle never reads `X-Forwarded-For` itself.
 
-## Development
+## Assets and browser behavior
+
+```sh
+php bin/console assets:install public
+```
+
+The script URL is built with Symfony's `asset()`, so the application's base path applies, and it normally resolves to `/bundles/softavisturnstile/turnstile.js`. Set `asset_package` to a named package from `framework.assets.packages` to serve it from that package (otherwise the default package is used). The script loads Cloudflare's `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit` directly; it is not proxied or bundled.
+
+Browser lifecycle as implemented: widgets are rendered explicitly; the token is stored in the matching hidden input on success and cleared on expiry or error (`expired`/`error` events are dispatched on the container); a `MutationObserver` mounts widgets inserted later and removes those whose nodes are removed. `window.__softavisTurnstileBundle` exposes `scan(root)`, `reset(container)` and `remove(container)`; `reset` clears the token and asks Cloudflare for a new one. A normal failed form response renders a new widget and token. The script does not disable submit buttons. This is **not** a Turbo/Stimulus integration and is not claimed to support SPA navigation.
+
+## Content Security Policy
+
+Allow `https://challenges.cloudflare.com` in the directives the widget needs (at least `script-src`, `frame-src` and `connect-src`), and allow the bundle's script under your own `script-src`. The bundle adds no inline JavaScript and does not need `'unsafe-inline'`.
+
+## Templates and translations
+
+- Plain widget: `@SoftavisTurnstile/widget.html.twig`, overridable at `templates/bundles/SoftavisTurnstile/widget.html.twig`.
+- Form theme: `@SoftavisTurnstile/form/turnstile_widget.html.twig` (block `turnstile_widget`), overridable at `templates/bundles/SoftavisTurnstile/form/turnstile_widget.html.twig`, or by supplying your own form theme with that block.
+
+Messages use the `validators` domain (English and Bulgarian included). Override `softavis_turnstile.invalid`, `softavis_turnstile.unavailable` and `softavis_turnstile.authentication_failed` in your catalogs.
+
+## Errors
+
+Users only see generic messages; transport details are never included. In forms, a rejected token (`softavis_turnstile.invalid`) is distinct from an operational failure (`softavis_turnstile.unavailable`). Login protection gives both the same `softavis_turnstile.authentication_failed` error. Missing or blank tokens are rejected. A failed login follows Symfony's normal authentication-failure path.
+
+## Disabled mode and test keys
+
+`enabled: false` allows missing credentials, renders only an empty hidden input, skips form validation and makes no verification request. Automatic login protection is skipped, and an explicit `TurnstileBadge` is marked resolved without a verifier call.
+
+For development and automated tests you can use Cloudflare's official [test keys](https://developers.cloudflare.com/turnstile/troubleshooting/testing/). They are not production credentials, and the dummy tokens they produce are not real challenge results; see that page for their behavior.
+
+## Advanced and development
+
+### Transport and verifier customization
+
+The default HTTP client uses a 5-second inactivity timeout and 10-second maximum duration and does not change application-wide HTTP aliases. Under `transport`, set `http_client_service` (an `HttpClientInterface` service ID), `psr18_client_service` and/or `psr17_factory_service` (implementing the request, response and stream factories). The bundle's defaults are `softavis_turnstile.http_client`, `softavis_turnstile.psr18_client` and `softavis_turnstile.psr17_factory`. To replace the verifier entirely, set `verifier_service` to a service implementing `Softavis\Turnstile\TurnstileVerifier`; it replaces the interface alias. Throw `Softavis\Turnstile\Exception\TurnstileException` for operational failures so the generic unavailable message is used.
+
+### Listener ordering
+
+The login listener runs on `CheckPassportEvent` at priority 384: after CSRF validation (512) and before user checking and password credentials (256/0). The user-provider listener (1024) only configures a lazy loader. Login throttling (2080) therefore runs before Turnstile.
+
+### Development commands
 
 ```sh
 composer install
 composer test
 composer analyse
 composer style
+node --test tests/Browser/turnstile.test.js
 ```
 
-Bundle-level verification tests stub `TurnstileVerifier`; there are no live Cloudflare requests in this repository. The JavaScript lifecycle has a focused Node VM test using a local Turnstile API stub; it is not a real browser or Cloudflare validation. CI pins each Symfony matrix job to its declared minor series and runs a lowest-supported dependency job. Symfony 8.0 is not supported because Composer security advisories block its available releases. Live credentials, CSP deployments, and full SPA/Turbo behavior are outside the automated test scope.
+### Test architecture and limitations
 
-## Alternatives
-
-- [vuillaume-agency/symfony-turnstile](https://github.com/vuillaume-agency/symfony-turnstile)
-- [pixelopen/cloudflare-turnstile-bundle](https://github.com/pixelopen/cloudflare-turnstile-bundle)
+PHP tests stub `TurnstileVerifier` and include functional HTTP authentication tests on the supported Symfony series; no live Cloudflare requests are made. The JavaScript lifecycle test uses a Node VM with a local Turnstile API stub. The project has **not** been validated in a real browser, against live Cloudflare, with real CSP deployments, or with Turbo/Stimulus/SPA navigation.
